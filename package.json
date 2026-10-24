@@ -1,0 +1,28 @@
+{
+  "name": "anicore-api",
+  "version": "1.0.0",
+  "description": "Free, self-hostable, multilingual anime & manga metadata API. Zero copyrighted data stored — live aggregation from open community APIs (AniList, Kitsu).",
+  "type": "module",
+  "main": "src/index.js",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js"
+  },
+  "keywords": [
+    "anime",
+    "manga",
+    "api",
+    "anilist",
+    "kitsu",
+    "multilingual",
+    "metadata",
+    "jikan-alternative"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.19.2"
+  }
+}
