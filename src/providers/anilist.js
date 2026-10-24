@@ -112,3 +112,18 @@ export async function anilistCharacter(id) {
   const data = await anilistQuery(query, { id });
   return data.Character;
 }
+
+const MEDIA_EXTRAS = `
+  characters(perPage: 25, sort: [ROLE, RELEVANCE]) {
+    edges { role node { id name { full native } image { large } } }
+  }
+  relations { edges { relationType node { id type title { userPreferred } coverImage { large } format averageScore } } }
+  recommendations(perPage: 12, sort: RATING_DESC) {
+    nodes { rating mediaRecommendation { id type title { userPreferred } coverImage { large } averageScore format } }
+  }
+`;
+
+export async function anilistMediaExtras(id) {
+  const query = `query ($id: Int) { Media(id: $id) { id ${MEDIA_EXTRAS} } }`;
+  return anilistQuery(query, { id });
+}

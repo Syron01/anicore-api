@@ -2,9 +2,22 @@
 
 **TR** | [EN below](#english)
 
-Ücretsiz, açık kaynak, çok dilli anime & manga metadata API'si. API key yok, ücretli katman yok, rate-limit korkusu yok — **kendin host edersin, kural senin.**
+Ücretsiz, açık kaynak, çok dilli anime & manga metadata API'si. API key yok, ücretli katman yok — **kendin host edersin, kural senin.**
 
-Jikan'dan farklı olarak AniCore hiçbir yerden veri kazımaz (scrape) ve hiçbir telifli içeriği depolamaz. [AniList](https://anilist.co) ve [Kitsu](https://kitsu.app) gibi açık topluluk API'lerini canlı toplar, tek ve zengin bir şemada birleştirir.
+## ⚡ Power Mode: tüm veri, saniyeler içinde, sıfır limit
+
+```bash
+curl -X POST localhost:4000/v1/sync/anime   # tüm AniList anime DB'sini (~21k) yerel SQLite'a aynala
+```
+
+Bir kez çalıştır, sonra her şey değişir:
+
+- **Sıfır rate limit** — arama, top, sezon ve detay sorguları artık yerel aynadan servis edilir; `X-Served-By: mirror` başlığıyla. Milyonlarca istek atabilirsin, kimse durdurmaz.
+- **Milisaniye hız** — FTS5 tam metin indeksli arama ~4 ms'de yanıt verir (Japonca/İbranice/Çince başlıklarda bile). `gzip` + ETag dahili.
+- **Bulk**: `GET /v1/anime/bulk?ids=1,2,3...` tek istekte 500 kayıt.
+- **Resumable senkron**: yarıda kesersen yeniden başlat, kaldığı sayfadan devam eder. `GET /v1/sync/status` ile ilerleme.
+
+Jikan'dan farklı olarak AniCore hiçbir yerden veri kazımaz (scrape) ve hiçbir telifli içeriği depolamaz. [AniList](https://anilist.co) ve [Kitsu](https://kitsu.app) gibi açık topluluk API'lerini toplar, tek ve zengin bir şemada birleştirir.
 
 ## Neden Jikan'dan iyi?
 
@@ -28,16 +41,23 @@ npm start
 ## Endpoint'ler
 
 ```
-GET /v1/anime/search?q=frieren          # arama (page, perPage)
-GET /v1/anime/:id                       # detay (cross-provider id'lerle)
-GET /v1/anime/top                       # en yüksek puanlılar
-GET /v1/anime/trending                  # trendler
+POST /v1/sync/anime | /v1/sync/manga    # tüm veritabanını yerel aynaya indir (resumable)
+GET  /v1/sync/status                    # ayna ilerlemesi
+
+GET /v1/anime/search?q=frieren          # arama (mirror: FTS5, ms-hızında)
+GET /v1/anime/:id                       # detay (mirror-first)
+GET /v1/anime/bulk?ids=1,2,3            # tek istekte 500 kayıt
+GET /v1/anime/top?by=score|popularity
+GET /v1/anime/trending                  # trendler (canlı, daima güncel)
 GET /v1/anime/season/2024/fall          # sezon (winter|spring|summer|fall)
+GET /v1/anime/:id/characters            # kadro + roller
+GET /v1/anime/:id/relations             # franchise grafiği (devam, spin-off)
+GET /v1/anime/:id/recommendations       # "bunu beğendiyseniz"
 GET /v1/manga/search?q=berserk
-GET /v1/manga/:id
+GET /v1/manga/top | /v1/manga/:id
 GET /v1/character/:id
 GET /v1/kitsu/anime/:id                 # doğrudan Kitsu id ile
-GET /health                             # sağlık + önbellek istatistikleri
+GET /health                             # sağlık + önbellek + ayna istatistikleri
 ```
 
 Örnek yanıt (kırpılmış):

@@ -2,3 +2,6 @@ node_modules/
 .env
 server.log
 *.log
+anicore.db
+anicore.db-wal
+anicore.db-shm
