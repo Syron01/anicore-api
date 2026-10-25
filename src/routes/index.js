@@ -36,6 +36,27 @@ function paginationOf(page, perPage, count) {
   return { page, perPage, count, hasMore: count === perPage };
 }
 
+/* ------------------------- tr translation (free) ------------------------- */
+
+const trCache = new Map();
+router.get(
+  '/translate/tr',
+  wrap(async (req, res) => {
+    const text = String(req.query.q ?? '').trim();
+    if (!text) return res.status(400).json({ error: 'Missing q' });
+    const key = text.slice(0, 500);
+    if (trCache.has(key)) return res.json({ translation: trCache.get(key) });
+    const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=tr&dt=t&q=${encodeURIComponent(text.slice(0, 1500))}`;
+    const r = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0' }, signal: AbortSignal.timeout(9000) });
+    if (!r.ok) throw new Error(`translate ${r.status}`);
+    const data = await r.json();
+    const out = (data?.[0] ?? []).map((seg) => seg?.[0] ?? '').join('');
+    trCache.set(key, out);
+    if (trCache.size > 2000) trCache.delete(trCache.keys().next().value);
+    respond(res, { translation: out }, ['google-translate'], 'live');
+  }),
+);
+
 /* ---------------------------------- sync ---------------------------------- */
 
 router.post('/sync/:kind', wrap(async (req, res) => {
