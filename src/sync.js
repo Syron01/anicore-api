@@ -3,7 +3,8 @@ import { anilistQuery } from './providers/anilist.js';
 import { Semaphore } from './lib/rate-limit.js';
 import { priority } from './lib/priority.js';
 
-const BULK_SEM = new Semaphore(Number(process.env.SYNC_CONCURRENCY ?? 4));
+const BULK_SEM = new Semaphore(Number(process.env.SYNC_CONCURRENCY ?? 3)); // outer year guard
+const POOL = new Semaphore(Number(process.env.SYNC_POOL ?? 14)); // parallel pages within a chunk
 const PER_PAGE = 50;
 // AniList caps Page depth at 5000 entries (page 101 @ perPage 50).
 // So we chunk the entire catalog BY YEAR — no single year comes close to 5k.
@@ -105,42 +106,67 @@ async function runSync(kind) {
   console.log(`[sync:${kind}] complete: ${s.total} items`);
 }
 
+/**
+ * Syncs one chunk (a year, or a month fallback) with PARALLEL page fetches.
+ * Page 1 is fetched sequentially to learn the page count; pages 2..lastPage
+ * then fly in a 14-wide pool, saturating AniList's per-IP rate ceiling.
+ * Returns {overflow:true} if the chunk exceeds the 5000-entry depth cap.
+ */
 async function pageLoop(kind, filters, startPage) {
-  let page = startPage;
-  for (;;) {
+  const bump = (n) => stateUpsert.run({
+    kind,
+    last_id: Math.floor(stateGet.get(kind).last_id / 10000) * 10000,
+    total: (stateGet.get(kind).total ?? 0) + n,
+    running: 1,
+    started_at: stateGet.get(kind).started_at,
+    finished_at: null,
+  });
+
+  const fetchPage = async (page) => {
     // yield to interactive (user-facing) requests before every page
     while (priority.waiters > 0) {
-      await new Promise((r) => setTimeout(r, 300));
+      await new Promise((r) => setTimeout(r, 250));
     }
-    let medias;
-    let data;
-    try {
-      data = await BULK_SEM.run(() =>
-        anilistQuery(SYNC_PAGE_QUERY, { kind, page, perPage: PER_PAGE, ...filters }),
-      );
-      medias = data.Page.media;
-      if (medias.length === 0) return { overflow: false };
-    } catch (err) {
-      if (String(err.message).includes('depth exceeds')) return { overflow: true };
-      // one chunk failing must never kill the whole mirror build
-      console.error(`[sync:${kind}] page ${page} failed: ${err.message}`);
-      return { overflow: false };
-    }
+    const data = await POOL.run(() =>
+      anilistQuery(SYNC_PAGE_QUERY, { kind, page, perPage: PER_PAGE, ...filters }),
+    );
+    return data.Page;
+  };
 
-    importBatch(medias.map((m) => toItem(m, kind)));
-
-    stateUpsert.run({
-      kind,
-      last_id: page,
-      total: (stateGet.get(kind).total ?? 0) + medias.length,
-      running: 1,
-      started_at: stateGet.get(kind).started_at,
-      finished_at: null,
-    });
-
-    if (!data.Page.pageInfo.hasNextPage) return { overflow: false };
-    page++;
+  // page 1: sequential — teaches us lastPage and detects instant overflow
+  let first;
+  try {
+    first = await fetchPage(startPage);
+  } catch (err) {
+    if (String(err.message).includes('depth exceeds')) return { overflow: true };
+    console.error(`[sync:${kind}] page ${startPage} failed: ${err.message}`);
+    return { overflow: false };
   }
+  if (first.media.length > 0) {
+    importBatch(first.media.map((m) => toItem(m, kind)));
+    bump(first.media.length);
+  }
+  const lastPage = first.pageInfo.lastPage ?? startPage;
+
+  if (lastPage > startPage) {
+    const pages = [];
+    for (let p = startPage + 1; p <= lastPage; p++) pages.push(p);
+    let overflow = false;
+    await Promise.all(pages.map(async (page) => {
+      try {
+        const data = await fetchPage(page);
+        if (data.media.length > 0) {
+          importBatch(data.media.map((m) => toItem(m, kind)));
+          bump(data.media.length);
+        }
+      } catch (err) {
+        if (String(err.message).includes('depth exceeds')) overflow = true;
+        else console.error(`[sync:${kind}] page ${page} failed: ${err.message}`);
+      }
+    }));
+    if (overflow) return { overflow: true };
+  }
+  return { overflow: false };
 }
 
 function toItem(m, kind) {

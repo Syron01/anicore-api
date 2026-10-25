@@ -9,7 +9,7 @@ export const config = {
   providers: {
     anilist: {
       url: 'https://graphql.anilist.co',
-      concurrency: Number(process.env.ANILIST_CONCURRENCY ?? 3),
+      concurrency: Number(process.env.ANILIST_CONCURRENCY ?? 12),
     },
     kitsu: {
       url: 'https://kitsu.io/api/edge',

@@ -40,7 +40,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
  * fetch with retry + exponential backoff. Honors Retry-After on 429/5xx
  * so we never hammer a provider that tells us to slow down.
  */
-export async function fetchWithRetry(url, options = {}, { retries = 3, baseDelay = 800 } = {}) {
+export async function fetchWithRetry(url, options = {}, { retries = 4, baseDelay = 500 } = {}) {
   let lastError;
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {

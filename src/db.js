@@ -9,8 +9,8 @@ fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
 export const db = new Database(DB_PATH);
 db.pragma('journal_mode = WAL');
 db.pragma('synchronous = NORMAL');
-db.pragma('cache_size = -64000'); // 64 MB page cache
-db.pragma('mmap_size = 268435456');
+db.pragma('cache_size = -524288'); // 512 MB page cache — machine has plenty
+db.pragma('mmap_size = 1073741824'); // 1 GB mmap
 
 db.exec(`
 CREATE TABLE IF NOT EXISTS media (
