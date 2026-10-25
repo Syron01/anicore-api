@@ -85,40 +85,57 @@ async function runSync(kind) {
   for (const year of years) {
     if (year < resumeYear) continue;
     let page = year === resumeYear ? resumePage : 1;
-    for (;;) {
-      let medias;
-      let data;
-      try {
-        data = await BULK_SEM.run(() =>
-          anilistQuery(SYNC_PAGE_QUERY, { kind, page, perPage: PER_PAGE, ...filterFor(year) }),
-        );
-        medias = data.Page.media;
-        if (medias.length === 0) break;
-      } catch (err) {
-        // one chunk failing must never kill the whole mirror build
-        console.error(`[sync:${kind}] year ${year} page ${page} failed: ${err.message}`);
-        break;
+    const { overflow } = await pageLoop(kind, filterFor(year), page);
+    if (overflow) {
+      // year has >5000 entries (AniList page-depth cap) → re-chunk by month
+      console.log(`[sync:${kind}] year ${year} overflow, falling back to month chunks`);
+      for (let month = 1; month <= 12; month++) {
+        const f = filterFor(year);
+        f.startG = `${year}${String(month).padStart(2, '0')}01`;
+        const nm = month === 12 ? `${year + 1}0101` : `${year}${String(month + 1).padStart(2, '0')}01`;
+        f.startL = nm;
+        await pageLoop(kind, f, 1);
       }
-
-      importBatch(medias.map((m) => toItem(m, kind)));
-
-      stateUpsert.run({
-        kind,
-        last_id: year * 10000 + page,
-        total: (stateGet.get(kind).total ?? 0) + medias.length,
-        running: 1,
-        started_at: stateGet.get(kind).started_at,
-        finished_at: null,
-      });
-
-      if (!data.Page.pageInfo.hasNextPage) break;
-      page++;
     }
   }
 
   const s = stateGet.get(kind);
   stateUpsert.run({ kind, last_id: s.last_id, total: s.total, running: 0, started_at: s.started_at, finished_at: Date.now() });
   console.log(`[sync:${kind}] complete: ${s.total} items`);
+}
+
+async function pageLoop(kind, filters, startPage) {
+  let page = startPage;
+  for (;;) {
+    let medias;
+    let data;
+    try {
+      data = await BULK_SEM.run(() =>
+        anilistQuery(SYNC_PAGE_QUERY, { kind, page, perPage: PER_PAGE, ...filters }),
+      );
+      medias = data.Page.media;
+      if (medias.length === 0) return { overflow: false };
+    } catch (err) {
+      if (String(err.message).includes('depth exceeds')) return { overflow: true };
+      // one chunk failing must never kill the whole mirror build
+      console.error(`[sync:${kind}] page ${page} failed: ${err.message}`);
+      return { overflow: false };
+    }
+
+    importBatch(medias.map((m) => toItem(m, kind)));
+
+    stateUpsert.run({
+      kind,
+      last_id: page,
+      total: (stateGet.get(kind).total ?? 0) + medias.length,
+      running: 1,
+      started_at: stateGet.get(kind).started_at,
+      finished_at: null,
+    });
+
+    if (!data.Page.pageInfo.hasNextPage) return { overflow: false };
+    page++;
+  }
 }
 
 function toItem(m, kind) {

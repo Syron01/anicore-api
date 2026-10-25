@@ -1,3 +1,4 @@
+import path from 'node:path';
 import express from 'express';
 import compression from 'compression';
 import { config, SUPPORTED_LANGUAGES } from './config.js';
@@ -10,6 +11,7 @@ export function createApp() {
   app.disable('x-powered-by');
   app.set('etag', 'strong');
   app.use(compression());
+  app.use(express.static(path.join(process.cwd(), 'public')));
 
   // CORS (allow any self-hoster to consume)
   app.use((req, res, next) => {
