@@ -14,11 +14,11 @@ const FIRST_YEAR = 1917;
 const CURRENT_YEAR = new Date().getFullYear() + 1;
 
 const SYNC_PAGE_QUERY = `
-  query ($kind: MediaType, $page: Int, $perPage: Int, $seasonYear: Int, $startG: FuzzyDateInt, $startL: FuzzyDateInt) {
+  query ($kind: MediaType, $page: Int, $perPage: Int, $seasonYear: Int, $startG: FuzzyDateInt, $startL: FuzzyDateInt, $season: MediaSeason, $format: MediaFormat) {
     Page(page: $page, perPage: $perPage) {
       pageInfo { hasNextPage }
       media(type: $kind, sort: ID, isAdult: false,
-            seasonYear: $seasonYear,
+            seasonYear: $seasonYear, season: $season, format: $format,
             startDate_greater: $startG, startDate_lesser: $startL) {
         id idMal title { romaji english native userPreferred } synonyms
         description(asHtml: false) format status episodes duration chapters volumes
@@ -89,14 +89,33 @@ async function runSync(kind) {
     let page = year === resumeYear ? resumePage : 1;
     const { overflow } = await pageLoop(kind, filterFor(year), page);
     if (overflow) {
-      // year has >5000 entries (AniList page-depth cap) → re-chunk by month
-      console.log(`[sync:${kind}] year ${year} overflow, falling back to month chunks`);
-      for (let month = 1; month <= 12; month++) {
-        const f = filterFor(year);
-        f.startG = `${year}${String(month).padStart(2, '0')}01`;
-        const nm = month === 12 ? `${year + 1}0101` : `${year}${String(month + 1).padStart(2, '0')}01`;
-        f.startL = nm;
-        await pageLoop(kind, f, 1);
+      if (kind === 'ANIME') {
+        // anime has no reliable month filter → sub-chunk the year by season
+        console.log(`[sync:${kind}] year ${year} overflow, falling back to season chunks`);
+        for (const season of ['WINTER', 'SPRING', 'SUMMER', 'FALL']) {
+          const f = filterFor(year);
+          f.season = season;
+          const r = await pageLoop(kind, f, 1);
+          if (r.overflow) {
+            // a single season still >5000 (rare, modern specials) → drop adults
+            console.log(`[sync:${kind}] ${year} ${season} still overflow, splitting by format`);
+            for (const format of ['TV', 'TV_SHORT', 'OVA', 'ONA', 'MOVIE', 'SPECIAL']) {
+              const g = { ...f, format };
+              g.format = format;
+              await pageLoop(kind, g, 1);
+            }
+          }
+        }
+      } else {
+        // manga: chunk the overflowing year by month (startDate filters)
+        console.log(`[sync:${kind}] year ${year} overflow, falling back to month chunks`);
+        for (let month = 1; month <= 12; month++) {
+          const f = filterFor(year);
+          f.startG = `${year}${String(month).padStart(2, '0')}01`;
+          const nm = month === 12 ? `${year + 1}0101` : `${year}${String(month + 1).padStart(2, '0')}01`;
+          f.startL = nm;
+          await pageLoop(kind, f, 1);
+        }
       }
     }
   }
