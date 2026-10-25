@@ -194,7 +194,7 @@ export function topMedia(kind, { page = 1, perPage = 20, by = 'score' } = {}) {
 export function seasonMedia(kind, { year, season, page = 1, perPage = 20 } = {}) {
   const rows = db
     .prepare(
-      `SELECT payload FROM media WHERE kind = ? AND season = ? AND season_year = ?
+      `SELECT payload FROM media WHERE kind = ? AND lower(season) = ? AND season_year = ?
        ORDER BY popularity DESC LIMIT ? OFFSET ?`,
     )
     .all(kind, season, year, perPage, (page - 1) * perPage);
