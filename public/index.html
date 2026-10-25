@@ -151,22 +151,22 @@ button { font:inherit; color:inherit; background:none; border:none; cursor:point
     backdrop-filter:blur(18px); -webkit-backdrop-filter:blur(18px); border-bottom:1px solid var(--line); }
   .mobile-top .m-brand { text-align:center; padding:14px 0 2px; }
   .mobile-top .m-brand h1 { font-size:20px; letter-spacing:-.02em; display:inline; }
-  .mobile-top .m-tabs { display:flex; justify-content:center; gap:8px; padding:10px 12px 0; overflow-x:auto; scrollbar-width:none; }
+  .mobile-top .m-tabs { display:flex; gap:8px; padding:8px 16px 0; overflow-x:auto; scrollbar-width:none; justify-content:flex-start; }
   .mobile-top .m-tabs::-webkit-scrollbar { display:none; }
   .mobile-top .nav-item { width:auto; padding:8px 18px 12px; font-size:16px; color:var(--dim);
     border-left:none; background:none; border-bottom:2.5px solid transparent; border-radius:0; }
   .mobile-top .nav-item.active { color:var(--text); border-bottom-color:var(--text); background:none; }
   .mobile-top .nav-item .num { display:none; }
-  .main { padding:16px 0 100px; }
-  .topbar { padding:12px 16px 0; margin-bottom:16px; }
+  .main { padding:0 0 100px; }
+  .topbar { padding:14px 16px 4px; margin-bottom:8px; }
   .kicker { display:none; }
-  .topright { width:100%; flex-direction:column; align-items:stretch; gap:10px; }
-  .searchbox { max-width:none; }
+  .topright { width:100%; display:grid; grid-template-columns:1fr auto; gap:10px; align-items:center; }
+  .searchbox { max-width:none; grid-column:1 / -1; }
   .searchbox input { border-radius:14px; border-right:1px solid var(--line); height:46px; font-size:16px; }
   .searchbox select { border-radius:14px; }
   .searchbox button { border-radius:0 14px 14px 0; }
   .langsel { border-radius:14px; height:46px; }
-  .stats { margin:0 16px 20px; border-radius:16px; overflow:hidden; grid-template-columns:repeat(2,1fr); }
+  .stats { display:none; }
   .sect { padding:0 16px; }
   .pill-row { padding:0 16px; }
   .pill { border-radius:999px; padding:9px 16px; font-size:13px; }
@@ -184,11 +184,11 @@ button { font:inherit; color:inherit; background:none; border:none; cursor:point
   .bottomnav { display:flex; position:fixed; bottom:0; left:0; right:0; z-index:30;
     background:rgba(5,5,6,.88); backdrop-filter:blur(24px); -webkit-backdrop-filter:blur(24px);
     border-top:1px solid var(--line); padding:6px 8px calc(10px + env(safe-area-inset-bottom)); justify-content:space-around; }
-  .bottomnav .nav-item { flex-direction:column; gap:3px; width:auto; padding:6px 14px; font-size:10px;
+  .bottomnav .nav-item { flex-direction:column; gap:4px; width:auto; padding:7px 16px; font-size:10px;
     letter-spacing:1px; color:var(--dim); border:none; border-radius:14px; }
   .bottomnav .nav-item.active { color:var(--text); background:var(--panel2); }
   .bottomnav .nav-item .num { display:none; }
-  .bottomnav .ico { font-size:19px; line-height:1; }
+  .bottomnav .ico { width:21px; height:21px; display:block; }
   /* modal rounded */
   .overlay { padding:0; align-items:flex-end; }
   .modal { width:100%; max-height:94vh; overflow-y:auto; border-radius:24px 24px 0 0; border-bottom:none;
@@ -295,11 +295,21 @@ button { font:inherit; color:inherit; background:none; border:none; cursor:point
 </div>
 
 <nav class="bottomnav">
-  <button class="nav-item active" data-view="trending"><span class="ico">⚡</span>Trendler</button>
-  <button class="nav-item" data-view="search"><span class="ico">🔍</span>Arama</button>
-  <button class="nav-item" data-view="top"><span class="ico">🏆</span>Top</button>
-  <button class="nav-item" data-view="season"><span class="ico">📅</span>Sezon</button>
-  <button class="nav-item" data-view="mirror"><span class="ico">◧</span>Ayna</button>
+  <button class="nav-item active" data-view="trending">
+    <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 4.5 13.5H11L10 22l8.5-11.5H13L13 2z"/></svg>
+    Trendler</button>
+  <button class="nav-item" data-view="search">
+    <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+    Arama</button>
+  <button class="nav-item" data-view="top">
+    <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 21h8M12 17v4M7 4h10v4a5 5 0 0 1-10 0V4z"/><path d="M7 6H4a2 2 0 0 0 2 4h1M17 6h3a2 2 0 0 1-2 4h-1"/></svg>
+    Top</button>
+  <button class="nav-item" data-view="season">
+    <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M8 3v4M16 3v4M3 10h18"/></svg>
+    Sezon</button>
+  <button class="nav-item" data-view="mirror">
+    <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><ellipse cx="12" cy="5.5" rx="8" ry="2.8"/><path d="M4 5.5v6c0 1.6 3.6 2.8 8 2.8s8-1.2 8-2.8v-6"/><path d="M4 11.5v6c0 1.6 3.6 2.8 8 2.8s8-1.2 8-2.8v-6"/></svg>
+    Ayna</button>
 </nav>
 
 <!-- detail modal -->
