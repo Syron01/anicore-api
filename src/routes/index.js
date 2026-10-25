@@ -8,6 +8,8 @@ import {
   getMediaById, getMediaBulk, searchMedia, topMedia, seasonMedia, dbStats,
 } from '../db.js';
 import { db } from '../db.js';
+import { getExtras, setExtras } from '../db.js';
+import { priority } from '../lib/priority.js';
 
 export const router = Router();
 
@@ -170,6 +172,89 @@ router.get(
     if (!data?.Media) return res.status(404).json({ error: 'Anime not found' });
     const enriched = await aggregateMedia({ kind: 'ANIME', id, enrich: true });
     respond(res, { data: enriched.items[0] }, enriched.items[0].providers);
+  }),
+);
+
+router.get(
+  '/anime/:id/full',
+  wrap(async (req, res) => {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) return res.status(400).json({ error: 'Bad id' });
+
+    // 1) media: pure local mirror read — millisecond fast, always
+    let media = getMediaById('ANIME', id);
+    let mediaSource = 'mirror';
+
+    // 2) extras: permanent local cache → zero repeat cost
+    let extras = getExtras(id);
+    let extrasSource = extras ? 'cache' : null;
+
+    // 3) only the very first click ever pays one batched live round-trip;
+    //    sync yields to us while we wait, so this stays sub-second
+    if (!extras) {
+      priority.waiters++;
+      try {
+        const data = await anilistMediaExtras(id);
+        if (data?.Media) {
+          extras = {
+            characters: (data.Media.characters?.edges ?? []).map((e) => ({
+              role: e.role,
+              id: e.node.id,
+              name: { full: e.node.name?.full ?? null, native: e.node.name?.native ?? null },
+              image: e.node.image?.large ?? null,
+            })),
+            relations: (data.Media.relations?.edges ?? []).map((e) => ({
+              relation: e.relationType,
+              id: e.node.id,
+              type: e.node.type,
+              title: e.node.title?.userPreferred ?? null,
+              cover: e.node.coverImage?.large ?? null,
+              format: e.node.format ?? null,
+              score: e.node.averageScore ?? null,
+            })),
+            recommendations: (data.Media.recommendations?.nodes ?? [])
+              .filter((n) => n.mediaRecommendation)
+              .map((n) => ({
+                rating: n.rating,
+                id: n.mediaRecommendation.id,
+                type: n.mediaRecommendation.type,
+                title: n.mediaRecommendation.title?.userPreferred ?? null,
+                cover: n.mediaRecommendation.coverImage?.large ?? null,
+                score: n.mediaRecommendation.averageScore ?? null,
+                format: n.mediaRecommendation.format ?? null,
+              })),
+          };
+          setExtras(id, extras);
+          extrasSource = 'live';
+        }
+      } catch {
+        extras = { characters: [], relations: [], recommendations: [] };
+        extrasSource = 'unavailable';
+      } finally {
+        priority.waiters--;
+      }
+    }
+
+    // 4) mirror miss → fetch media once and persist it
+    if (!media) {
+      priority.waiters++;
+      try {
+        const data = await anilistMedia({ type: 'ANIME', id });
+        if (!data?.Media) return res.status(404).json({ error: 'Anime not found' });
+        const enriched = await aggregateMedia({ kind: 'ANIME', id, enrich: false });
+        media = enriched.items[0];
+        mediaSource = 'live';
+      } finally {
+        priority.waiters--;
+      }
+    }
+
+    respond(
+      res,
+      { data: { media, ...extras }, meta: { mediaSource, extrasSource } },
+      ['anilist'],
+      extrasSource === 'cache' ? 'mirror' : 'mirror+live',
+    );
   }),
 );
 

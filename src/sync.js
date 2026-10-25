@@ -1,6 +1,7 @@
 import { db, saveMediaBatch } from './db.js';
 import { anilistQuery } from './providers/anilist.js';
 import { Semaphore } from './lib/rate-limit.js';
+import { priority } from './lib/priority.js';
 
 const BULK_SEM = new Semaphore(Number(process.env.SYNC_CONCURRENCY ?? 4));
 const PER_PAGE = 50;
@@ -107,6 +108,10 @@ async function runSync(kind) {
 async function pageLoop(kind, filters, startPage) {
   let page = startPage;
   for (;;) {
+    // yield to interactive (user-facing) requests before every page
+    while (priority.waiters > 0) {
+      await new Promise((r) => setTimeout(r, 300));
+    }
     let medias;
     let data;
     try {

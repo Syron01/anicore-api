@@ -57,6 +57,12 @@ CREATE VIRTUAL TABLE IF NOT EXISTS media_fts USING fts5(
   content='media', content_rowid='anilist_id', tokenize='unicode61'
 );
 
+CREATE TABLE IF NOT EXISTS extras (
+  anilist_id INTEGER PRIMARY KEY,
+  payload    TEXT NOT NULL,
+  fetched_at INTEGER NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS sync_state (
   kind    TEXT PRIMARY KEY,
   last_id INTEGER NOT NULL DEFAULT 0,
@@ -207,4 +213,24 @@ export function dbStats() {
     .all();
   const state = db.prepare('SELECT * FROM sync_state').all();
   return { counts, sync: state };
+}
+
+/* ---------------------------- extras cache ----------------------------- */
+/* characters / relations / recommendations, cached forever (they change
+   rarely) so a second detail click is a pure local read. */
+
+export function getExtras(anilistId) {
+  const row = db.prepare('SELECT payload FROM extras WHERE anilist_id = ?').get(anilistId);
+  return row ? JSON.parse(row.payload) : null;
+}
+
+export const setExtras = db.transaction((anilistId, payload) => {
+  db.prepare(`
+    INSERT OR REPLACE INTO extras (anilist_id, payload, fetched_at)
+    VALUES (?, ?, ?)
+  `).run(anilistId, JSON.stringify(payload), Date.now());
+});
+
+export function extrasCount() {
+  return db.prepare('SELECT COUNT(*) n FROM extras').get().n;
 }
