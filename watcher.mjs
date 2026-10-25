@@ -4,8 +4,8 @@
  * starts the MANGA build; keeps an eye on both and restarts either if it
  * stops before the cursor reaches the final year. Logs to watcher.log.
  */
-import { db } from './db.js';
-import { startSync } from './sync.js';
+import { db } from './src/db.js';
+import { startSync } from './src/sync.js';
 
 const FINAL_YEAR = new Date().getFullYear() + 1;
 const doneCursor = (kind) => kind === 'ANIME' ? 20150000 : 20200000; // resume points

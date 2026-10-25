@@ -87,7 +87,7 @@ async function runSync(kind) {
   for (const year of years) {
     if (year < resumeYear) continue;
     let page = year === resumeYear ? resumePage : 1;
-    const { overflow } = await pageLoop(kind, filterFor(year), page);
+    const { overflow } = await pageLoop(kind, filterFor(year), page, year);
     if (overflow) {
       if (kind === 'ANIME') {
         // anime has no reliable month filter → sub-chunk the year by season
@@ -95,14 +95,14 @@ async function runSync(kind) {
         for (const season of ['WINTER', 'SPRING', 'SUMMER', 'FALL']) {
           const f = filterFor(year);
           f.season = season;
-          const r = await pageLoop(kind, f, 1);
+          const r = await pageLoop(kind, f, 1, year);
           if (r.overflow) {
             // a single season still >5000 (rare, modern specials) → drop adults
             console.log(`[sync:${kind}] ${year} ${season} still overflow, splitting by format`);
             for (const format of ['TV', 'TV_SHORT', 'OVA', 'ONA', 'MOVIE', 'SPECIAL']) {
               const g = { ...f, format };
               g.format = format;
-              await pageLoop(kind, g, 1);
+              await pageLoop(kind, g, 1, year);
             }
           }
         }
@@ -114,7 +114,7 @@ async function runSync(kind) {
           f.startG = `${year}${String(month).padStart(2, '0')}01`;
           const nm = month === 12 ? `${year + 1}0101` : `${year}${String(month + 1).padStart(2, '0')}01`;
           f.startL = nm;
-          await pageLoop(kind, f, 1);
+          await pageLoop(kind, f, 1, year);
         }
       }
     }
@@ -132,10 +132,10 @@ async function runSync(kind) {
  * them reports hasNextPage. Overflow (>5000 depth cap) is detected when a
  * wave reaches page 101+.
  */
-async function pageLoop(kind, filters, startPage) {
+async function pageLoop(kind, filters, startPage, cursorYear) {
   const bump = (n) => stateUpsert.run({
     kind,
-    last_id: Math.floor(stateGet.get(kind).last_id / 10000) * 10000,
+    last_id: (cursorYear ?? Math.floor(stateGet.get(kind).last_id / 10000)) * 10000,
     total: (stateGet.get(kind).total ?? 0) + n,
     running: 1,
     started_at: stateGet.get(kind).started_at,
