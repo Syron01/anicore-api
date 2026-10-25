@@ -126,10 +126,11 @@ async function runSync(kind) {
 }
 
 /**
- * Syncs one chunk (a year, or a month fallback) with PARALLEL page fetches.
- * Page 1 is fetched sequentially to learn the page count; pages 2..lastPage
- * then fly in a 14-wide pool, saturating AniList's per-IP rate ceiling.
- * Returns {overflow:true} if the chunk exceeds the 5000-entry depth cap.
+ * Syncs one chunk (a year / month / season) with PARALLEL page waves.
+ * AniList's pageInfo.lastPage LIES on filtered queries (reports 1), so we
+ * can't trust it — instead we fly waves of 14 pages and stop when none of
+ * them reports hasNextPage. Overflow (>5000 depth cap) is detected when a
+ * wave reaches page 101+.
  */
 async function pageLoop(kind, filters, startPage) {
   const bump = (n) => stateUpsert.run({
@@ -142,7 +143,6 @@ async function pageLoop(kind, filters, startPage) {
   });
 
   const fetchPage = async (page) => {
-    // yield to interactive (user-facing) requests before every page
     while (priority.waiters > 0) {
       await new Promise((r) => setTimeout(r, 250));
     }
@@ -152,7 +152,14 @@ async function pageLoop(kind, filters, startPage) {
     return data.Page;
   };
 
-  // page 1: sequential — teaches us lastPage and detects instant overflow
+  const store = (pageData) => {
+    if (pageData.media.length > 0) {
+      importBatch(pageData.media.map((m) => toItem(m, kind)));
+      bump(pageData.media.length);
+    }
+  };
+
+  // page 1: sequential — sanity check + overflow detection
   let first;
   try {
     first = await fetchPage(startPage);
@@ -161,30 +168,39 @@ async function pageLoop(kind, filters, startPage) {
     console.error(`[sync:${kind}] page ${startPage} failed: ${err.message}`);
     return { overflow: false };
   }
-  if (first.media.length > 0) {
-    importBatch(first.media.map((m) => toItem(m, kind)));
-    bump(first.media.length);
-  }
-  const lastPage = first.pageInfo.lastPage ?? startPage;
+  store(first);
+  let hasMore = first.pageInfo.hasNextPage !== false;
 
-  if (lastPage > startPage) {
-    const pages = [];
-    for (let p = startPage + 1; p <= lastPage; p++) pages.push(p);
-    let overflow = false;
-    await Promise.all(pages.map(async (page) => {
-      try {
-        const data = await fetchPage(page);
-        if (data.media.length > 0) {
-          importBatch(data.media.map((m) => toItem(m, kind)));
-          bump(data.media.length);
-        }
-      } catch (err) {
-        if (String(err.message).includes('depth exceeds')) overflow = true;
-        else console.error(`[sync:${kind}] page ${page} failed: ${err.message}`);
+  let cursor = startPage;
+  let overflow = false;
+  while (hasMore && !overflow) {
+    const wave = [];
+    for (let p = cursor + 1; p <= cursor + 14; p++) wave.push(p);
+    const results = await Promise.all(wave.map(async (page) => {
+      try { return { page, data: await fetchPage(page) }; }
+      catch (err) {
+        if (String(err.message).includes('depth exceeds')) return { page, overflow: true };
+        console.error(`[sync:${kind}] page ${page} failed: ${err.message}`);
+        return { page, data: null };
       }
     }));
-    if (overflow) return { overflow: true };
+
+    let anyMore = false;
+    let sawData = false;
+    for (const r of results) {
+      if (r.overflow) { overflow = true; continue; }
+      if (!r.data) continue;
+      store(r.data);
+      if (r.data.media.length > 0) sawData = true;
+      if (r.data.pageInfo.hasNextPage !== false) anyMore = true;
+    }
+    // stop if the whole wave came back empty (we ran past the end)
+    if (!sawData && !anyMore) break;
+    cursor += 14;
+    hasMore = anyMore;
   }
+
+  if (overflow) return { overflow: true };
   return { overflow: false };
 }
 
